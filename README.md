@@ -18,9 +18,9 @@ git clone --branch main git@github.com:fraivone/RefitAndNtuplizer.git
 ```
 
 ## Some info
-** DataFormats/GEMDigi ** contains the code to add relevant info to the `GEMOHStatus.h` and `GEMAMCStatus.h` so that I can store the DAQ status in the ntuples
-** MuDPGAnalysis/MuonDPGNtuples ** is the standard ntuplizer set up to work with the track refitter written by Marcello.
-** PlayingWithTracks/MuonRefit ** contains the class that takes care of refitting a global track with
+**DataFormats/GEMDigi** contains the code to add relevant info to the `GEMOHStatus.h` and `GEMAMCStatus.h` so that I can store the DAQ status in the ntuples
+**MuDPGAnalysis/MuonDPGNtuples** is the standard ntuplizer set up to work with the track refitter written by Marcello.
+**PlayingWithTracks/MuonRefit** contains the class that takes care of refitting a global track with
     1. `gemcase 0` GEM included
     1. `gemcase 1` GEM Layer 1 Included
     1. `gemcase 2` GEM Layer 2 Included 
