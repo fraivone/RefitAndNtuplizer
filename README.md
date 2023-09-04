@@ -23,7 +23,7 @@ git clone --branch main git@github.com:fraivone/RefitAndNtuplizer.git
 **MuDPGAnalysis/MuonDPGNtuples** is the standard ntuplizer set up to work with the track refitter written by Marcello.
 
 **PlayingWithTracks/MuonRefit** contains the class that takes care of refitting a global track with:
-    1. `gemcase 0` GEM included
-    1. `gemcase 1` GEM Layer 1 Included
-    1. `gemcase 2` GEM Layer 2 Included 
-    1. `gemcase 3` GEM excluded
+* `gemcase 0` GEM included
+* `gemcase 1` GEM Layer 1 Included
+* `gemcase 2` GEM Layer 2 Included 
+* `gemcase 3` GEM excluded
