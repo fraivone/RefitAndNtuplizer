@@ -97,9 +97,6 @@ void MuNtupleGEMRefitMuonFiller::initialize()
   
   m_tree->Branch((m_label + "_path_length").c_str(), &m_path_length);
 
-  m_tree->Branch((m_label + "_isinsideout").c_str(), &m_isinsideout);
-  m_tree->Branch((m_label + "_isincoming").c_str(), &m_isincoming);
-
   m_tree->Branch((m_label + "_propagated_region").c_str(), &m_propagated_region);
   m_tree->Branch((m_label + "_propagated_station").c_str(), &m_propagated_station);
   m_tree->Branch((m_label + "_propagated_layer").c_str(), &m_propagated_layer);
@@ -187,9 +184,7 @@ void MuNtupleGEMRefitMuonFiller::clear()
   m_isTight.clear();
 
   m_path_length = 0;
-  
-  m_isinsideout.clear();
-  m_isincoming.clear();
+
 
   m_propagated_region.clear();
   m_propagated_station.clear();
@@ -259,12 +254,10 @@ void MuNtupleGEMRefitMuonFiller::fill(const edm::Event & ev)
   auto csc_segments = conditionalGet<CSCSegmentCollection>(ev,m_cscSegmentToken, "CSCSegmentCollection" );
   //auto vtxs = conditionalGet<std::vector<reco::Vertex>>(ev, m_primaryVerticesToken, "std::vector<reco::Vertex>");
 
-  bool isCSC = false;
-  bool isME11 = false;
-  bool isME21 = false;
   int  muonCount = 0;
-  bool theVerboseOption = true;
-  int theRefitOption = 3;
+  bool theVerboseOption = m_config->verbose;
+  int theRefitOption =  m_config->refitOption;
+  TrajectoryStateCombiner tsoscomb;
 
  
   edm::ESHandle<Propagator>&& propagator_any = m_config->m_muonSP->propagator("SteppingHelixPropagatorAny");
@@ -304,6 +297,8 @@ void MuNtupleGEMRefitMuonFiller::fill(const edm::Event & ev)
     return;
   }
   auto const theMuonTransformer = m_config->theMuonTransformer.get();
+  auto prop_transformer = m_config->prop;
+  
 
   if (muons.isValid()){ // && csc_segments.isValid() && vtxs.isValid()) 
 
@@ -311,323 +306,276 @@ void MuNtupleGEMRefitMuonFiller::fill(const edm::Event & ev)
     for (const auto & muon : (*muons)){
       
       
-      // TESTING
+      // has global trackf
       muonCount += 1;
       if(!muon.globalTrack().isNull()) {
-                     
+        
         const reco::Track track = *muon.globalTrack().get();
         // here I'm refitting and I use the python option to decide if to include or exclude the GEM SYSTEM
         //      auto const& trajectoriesSM = theMuonTransformer->transform(track);
-        // here I'm refitting excluding layer 1 (1=layer2 excluded, 2=layer1 excluded, 3-=exclude both, 0=exclude none)
+        // here I'm refitting excluding layer 1 (1=layer2 excluded, 2=layer1 excluded, 3=exclude both, 0=exclude none)
         if (theVerboseOption)
           std::cout<<"Reftitting with option " << theRefitOption << std::endl;
-        theMuonTransformer->muontransform(track,theRefitOption);
-      }
-      // TESTING
+        auto const& trajectoriesSM = theMuonTransformer->muontransform(track,theRefitOption);
+        TrajectoryStateOnSurface lastTrackerTsos;
+        TrajectoryStateOnSurface firstMuonTsos;
+        double lastTrackerPos = 0.0;
+        double firstMuonPos = 100000.0;
+        bool hasM=false;
+        bool hasT=false;
+        
+        // refit successfull
+        if (trajectoriesSM.size() > 0){
 
-	  m_pt.push_back(muon.pt());
-	  m_eta.push_back(muon.eta());
-	  m_phi.push_back(muon.phi());
-	  m_charge.push_back(muon.charge());
-
-	  m_isGlobal.push_back(muon.isGlobalMuon());
-	  m_isStandalone.push_back(muon.isStandAloneMuon());
-	  m_isTracker.push_back(muon.isTrackerMuon());
-	  m_isGEM.push_back(muon.isGEMMuon());
-
-	  m_isLoose.push_back(muon.passed(reco::Muon::CutBasedIdLoose));
-	  m_isMedium.push_back(muon.passed(reco::Muon::CutBasedIdMedium));
-	  m_isTight.push_back(muon.passed(reco::Muon::CutBasedIdTight));
-
-	  m_nMuons++;
-      
-      isCSC = false;
-      isME11 = false;
-      isME21 = false;
-
-	  //if(!muon.globalTrack().isNull())  //GLB muon
-	  //if(!muon.innerTrack().isNull() && muon.innerTrack().isAvailable())   //tracker muon	  
-	  if(!muon.outerTrack().isNull())   //STA muon
-
-	    {
-	      
-
-	      //const reco::Track* track = muon.globalTrack().get();   //GLB muon
-          //const reco::Track* track = muon.innerTrack().get();    //tracker muon
-          const reco::Track* track = muon.outerTrack().get();    //STA muon
-	      
-	      if (track == nullptr) {
-		std::cout << "failed to get muon track" << std::endl;
-                continue;
-              }
-
-	      //const reco::TrackRef trackRef = muon.globalTrack();       //GLB muon              
-	      //const reco::TrackRef innerTrackRef = muon.innerTrack();   //tracker muon
-	      const reco::TrackRef outerTrackRef = muon.outerTrack();   //STA muon  
-
-	    
-
-	      float p2_in = track->innerMomentum().mag2();
-	      float p2_out = track->outerMomentum().mag2();
-	      float pos_out = track->outerPosition().mag2();
-	      float pos_in = track->innerPosition().mag2();
-
-	      bool is_insideout = pos_in > pos_out;
-
-	      if(is_insideout)
-		{
-		  std::swap(pos_in, pos_out);
-		  std::swap(p2_in, p2_out);
-		}
-	            
-	      bool is_incoming = p2_out > p2_in;
-
-	      const reco::TransientTrack&& transient_track = transient_track_builder->build(track);
-	      if (not transient_track.isValid()) 
-		{
-		  std::cout<<"failed to build TransientTrack" << std::endl;
-		  continue;
-		}
-
-	     	      
-	      const auto&& start_state = is_insideout ? transient_track.outermostMeasurementState() : transient_track.innermostMeasurementState();
-	      auto& propagator = is_incoming ? propagator_along : propagator_opposite;
-	     
-	      //auto recHitMu = trackRef->recHitsBegin();           //GLB muon
-	      //auto recHitMu = innerTrackRef->recHitsBegin();      //tracker muon
-	      auto recHitMuEnd = outerTrackRef ->recHitsEnd();      //STA muon
-
-	      //auto recHitMuEnd = innerTrackRef->recHitsEnd();     //tracker muon
-	      auto recHitMu = outerTrackRef->recHitsBegin();      //STA muon
-	      // auto recHitMuEnd = innerTrackerRef->recHitsEnd();     //STA muon
-
-          const reco::HitPattern& htp = transient_track.hitPattern();
-
-	      for(; recHitMu != recHitMuEnd; ++recHitMu)
-              {
-                  DetId detId = (*recHitMu)->geographicalId();
-                  if(detId.det() == DetId::Muon && detId.subdetId() == MuonSubdetId::GEM)
-                      {
-                          // std::cout<<"InnermostZ = " << transient_track.innermostMeasurementState().globalPosition().z()<<std::endl;
-                          // std::cout<<"GEM found in STA track"<<std::endl;
-                      }
-                  if(detId.det() == DetId::Muon && detId.subdetId() == MuonSubdetId::CSC)
-                      {
-                          isCSC = true;
-                          const CSCDetId csc_id{detId};
-                          // ME11 chambers are composed by 2 subchambers: ME11a, ME11b. In CMSSW they are referred as Stat. 1 Ring 1, Stat. 1 Ring. 4 respectively
-                          if(csc_id.station() == 1 && ((csc_id.ring() == 1) || (csc_id.ring() == 4)) ) 
-                              {
-                                  isME11 = true;
-                              }
-                          if(csc_id.station() == 2 && csc_id.ring() == 1)
-                              {
-                                  isME21 = true;
-                              }
-
-                      }
-              } //loop on recHits to find if muon has MEX1 hits
+          auto traj = trajectoriesSM.front();
+          // collection->push_back(traj);
+          std::vector<TrajectoryMeasurement> mss = traj.measurements();
+          // let's determine the last tsos on tracker (the one nearest to muon)
+          // let's determine the first tsos on muon (except GEM)
           
-                            
-	      m_isCSC.push_back(isCSC);
+          
+          isCSC = false;
+          isME11 = false;
+          isME21 = false;
+          nME1_hits = 0;
+          nME2_hits = 0;
+          nME3_hits = 0;
+          nME4_hits = 0;
+         
+          for (auto ims : mss){
+	          TrajectoryStateOnSurface tsos = tsoscomb(ims.forwardPredictedState(), ims.backwardPredictedState());
+	          const TransientTrackingRecHit* hit = &(*ims.recHit());
+	          DetId detId = hit->geographicalId();
+  
+            if (tsos.isValid() && detId.det() == DetId::Tracker) {
+	             double tsosPos = sqrt(tsos.globalPosition().x() * tsos.globalPosition().x() + tsos.globalPosition().y() * tsos.globalPosition().y()); 
+               double tsoszPos = tsos.globalPosition().z();
+	             if (tsosPos > lastTrackerPos) {
+	               lastTrackerTsos = tsos;
+	               lastTrackerPos = tsosPos;
+	               hasT=true;
+	             }
+	          } // end Current measurement belongs to the Tracker 
+
+            else if (tsos.isValid() && detId.det() == DetId::Muon && detId.subdetId() != 4){	  
+	             double tsosPos = sqrt(tsos.globalPosition().x() * tsos.globalPosition().x() + tsos.globalPosition().y() * tsos.globalPosition().y());
+               double tsoszPos = tsos.globalPosition().z();
+               if (tsosPos < firstMuonPos) {
+                 firstMuonTsos = tsos;
+                 firstMuonPos = tsosPos;
+	               hasM=true;
+               }	  
+	          } // end Current measurement belongs to the Muon/nonGEM
+
+            if(detId.det() == DetId::Muon && detId.subdetId() == MuonSubdetId::CSC){
+              isCSC = true;
+              const CSCDetId csc_id{detId};
+              int CSC_station = csc_id.station();
+              switch(CSC_station) {
+              case 1 :
+                nME1_hits++;
+                if ((csc_id.ring() == 1) || (csc_id.ring() == 4))
+                  isME11 = true;
+                break;
+              case 2 :
+                nME2_hits++;
+                if (csc_id.ring() == 1)
+                  isME21 = true;
+                break;
+              case 3 :
+                nME3_hits++;
+                break;
+              case 4 :
+                nME4_hits++;
+                break;
+              default: 
+                std::cout<<"Invalid CSC station " <<std::endl;
+              }
+            }// is CSC
+          }// end loop on the measurements of the transformed track
+          
+          if ( theVerboseOption){
+            std::cout<<"Summary of the measurements of the muon track number "<<muonCount << std::endl;
+            std::cout<<"Track hasTracker "<<hasT <<"\tTrack has Muon "<<hasM<<std::endl;
+            std::cout<<"Last tracker R "<<lastTrackerPos <<"\tFirst non GEM Muon R "<<firstMuonPos<<std::endl;
+          }
+        }// refit successfull
+
+        else {// what to do in case the muon refit fails
+        continue;
+        }
+
+	      m_pt.push_back(muon.pt());
+	      m_eta.push_back(muon.eta());
+	      m_phi.push_back(muon.phi());
+	      m_charge.push_back(muon.charge());
+
+	      m_isGlobal.push_back(muon.isGlobalMuon());
+	      m_isStandalone.push_back(muon.isStandAloneMuon());
+	      m_isTracker.push_back(muon.isTrackerMuon());
+	      m_isGEM.push_back(muon.isGEMMuon());
+
+	      m_isLoose.push_back(muon.passed(reco::Muon::CutBasedIdLoose));
+	      m_isMedium.push_back(muon.passed(reco::Muon::CutBasedIdMedium));
+	      m_isTight.push_back(muon.passed(reco::Muon::CutBasedIdTight));
+        m_isCSC.push_back(isCSC);
 	      m_isME11.push_back(isME11);
 	      m_isME21.push_back(isME21);
+
+	      m_nMuons++;
 	      
-          //if at least one CSC hit is found, perform propagation 
-	      if(isCSC)
-              { 
-                  //std::cout<<"Track HITS"<<std::endl;
-                  //htp.print(reco::HitPattern::TRACK_HITS);
+	      float pos_out = track.outerPosition().mag2();
+	      float pos_in = track.innerPosition().mag2();
+        bool reversedMuon =  pos_in > pos_out;
+	      
+        //if at least one isME11 hit is found, perform propagation 
+	      if(isME11 && hasT && hasM && !reversedMuon){
+          const reco::TransientTrack&& transient_track = transient_track_builder->build(&track);
+	        if (not transient_track.isValid()){
+		        std::cout<<"failed to build TransientTrack" << std::endl;
+		        continue;
+		      }
+          //PROPAGATION START STATE
+          const auto start_state = firstMuonTsos;
 
-                  // CSC Hits
-                  int nME1_hits = 0;
-                  int nME2_hits = 0;
-                  int nME3_hits = 0;
-                  int nME4_hits = 0;
+          for (const GEMRegion* gem_region : gem->regions()){
+            bool is_opposite_region = muon.eta() * gem_region->region() < 0;
+            for (const GEMStation* station : gem_region->stations()){
+              //if (station->station()!=1) continue; // Skipping GE21 station
+              for (const GEMSuperChamber* super_chamber : station->superChambers()){
+                for (const GEMChamber* chamber : super_chamber->chambers()){
+                  for (const GEMEtaPartition* eta_partition : chamber->etaPartitions()){
+                    const BoundPlane& bound_plane = eta_partition->surface();
 
-                  for (int i = 0; i < htp.numberOfAllHits(htp.TRACK_HITS); i++) {
-                      uint32_t hit = htp.getHitPattern(htp.TRACK_HITS, i);
-                      int substructure = htp.getSubStructure(hit);
-                      int hittype = htp.getHitType(hit);
-
-                      
-                      if ( substructure == 2 && hittype == 0) // CSC Hits
-                          {
-                              int CSC_station = htp.getMuonStation(hit);
-                              
-                              switch(CSC_station) {
-                              case 1 :
-                                  nME1_hits++;
-                                  break;
-                              case 2 :
-                                  nME2_hits++;
-                                  break;
-                              case 3 :
-                                  nME3_hits++;
-                                  break;
-                              case 4 :
-                                  nME4_hits++;
-                                  break;
-                              default: 
-                                  std::cout<<"Invalid station " <<std::endl;
-                              }
-                              
-                          }
-                  }
-                      
-
-                  for (const GEMRegion* gem_region : gem->regions())
-                      {
-                          bool is_opposite_region = muon.eta() * gem_region->region() < 0;
-                          if (is_incoming xor is_opposite_region) continue;
-                          
-                          for (const GEMStation* station : gem_region->stations())
-                              {//if (station->station()!=1) continue; // Skipping GE21 station
-                                  for (const GEMSuperChamber* super_chamber : station->superChambers())
-                                      {
-                                          for (const GEMChamber* chamber : super_chamber->chambers())
-                                              {
-                                                  for (const GEMEtaPartition* eta_partition : chamber->etaPartitions())
-                                                      {
-                                                          const BoundPlane& bound_plane = eta_partition->surface();
-
-                                                          // PROPAGATION ON ETAP SURFACE
-                                                          // The Z of the dest_state is fixed one the boundplane. x,y are actually evaluated by the propagator at that Z
-                                                          //const auto& dest_state = propagator_any->propagate(start_state,bound_plane);
-                                                          //END PROPAGATION ON ETAP SURFACE
-                                                          // // PROPAGATION IN THE DRIFT GAP
-                                                          BoundPlane& etaPSur_translated_to_drift = const_cast<BoundPlane&>(bound_plane);
-                                                          int ch = eta_partition->id().chamber();
-                                                          int re = eta_partition->id().region();
-                                                          
-                                                          if (re == -1){
-                                                              etaPSur_translated_to_drift.move(GlobalVector(0.,0.,m_displacement));
-                                                              const auto& dest_state = propagator_any->propagate(start_state,etaPSur_translated_to_drift);
-                                                              etaPSur_translated_to_drift.move(GlobalVector(0.,0.,-m_displacement));
-                                                          }
-                                                          else if (re == 1)  {
-                                                              etaPSur_translated_to_drift.move(GlobalVector(0.,0.,-m_displacement));
-                                                              const auto& dest_state = propagator_any->propagate(start_state,etaPSur_translated_to_drift);
-                                                              etaPSur_translated_to_drift.move(GlobalVector(0.,0.,m_displacement));
-                                                          }
-                                                          else{
-                                                              std::cout<<"Error region is neither +1 or -1"<<std::endl;
-                                                              const auto& dest_state = propagator_any->propagate(start_state,etaPSur_translated_to_drift);
-                                                          }
-                                                          // // END PROPAGATION IN THE DRIFT GAP
+                    // PROPAGATION ON ETAP SURFACE
+                    // The Z of the dest_state is fixed one the boundplane. x,y are actually evaluated by the propagator at that Z
+                    const auto& dest_state = prop_transformer->propagate(start_state,bound_plane);
+                    //END PROPAGATION ON ETAP SURFACE
+                    // PROPAGATION IN THE DRIFT GAP
+                    // BoundPlane& etaPSur_translated_to_drift = const_cast<BoundPlane&>(bound_plane);
+                    // int ch = eta_partition->id().chamber();
+                    // int re = eta_partition->id().region();
+                    // if (re == -1){
+                    // etaPSur_translated_to_drift.move(GlobalVector(0.,0.,m_displacement));
+                    //     const auto& dest_state = propagator_any->propagate(start_state,bound_plane);
+                    // etaPSur_translated_to_drift.move(GlobalVector(0.,0.,-m_displacement));
+                    // }
+                    // else if (re == 1)  {
+                    // etaPSur_translated_to_drift.move(GlobalVector(0.,0.,-m_displacement));
+                    //   const auto& dest_state = propagator_any->propagate(start_state,bound_plane);
+                    // etaPSur_translated_to_drift.move(GlobalVector(0.,0.,m_displacement));
+                    // }
+                    // else{
+                    //   std::cout<<"Error region is neither +1 or -1"<<std::endl;
+                    //   const auto& dest_state = propagator_any->propagate(start_state,bound_plane);
+                    // }
+                    // END PROPAGATION IN THE DRIFT GAP
 
 
-                                                          if (not dest_state.isValid())
-                                                              {
-                                                                  //std::cout << "failed to propagate" << std::endl;
-                                                                  continue;
-                                                              }
+                    if (not dest_state.isValid()){
+                      if(theVerboseOption) 
+                        std::cout << "failed to propagate" << std::endl;
+                      continue;
+                    }
 
+                    const GlobalPoint&& dest_global_pos = dest_state.globalPosition();
+                    const LocalPoint&& local_point = eta_partition->toLocal(dest_global_pos);
+                    const LocalPoint local_point_2d(local_point.x(), local_point.y(), 0.0f);
 
-                                                          const GlobalPoint&& dest_global_pos = dest_state.globalPosition();
-                                                          const LocalPoint&& local_point = eta_partition->toLocal(dest_global_pos);
-                                                          const LocalPoint local_point_2d(local_point.x(), local_point.y(), 0.0f);
+                    if (eta_partition->surface().bounds().inside(local_point_2d)) {
+                      const GEMDetId&& gem_id = eta_partition->id();
 
-                                                          if (eta_partition->surface().bounds().inside(local_point_2d)) 
-                                                              {
+                      //// PROPAGATED HIT ERROR EVALUATION
+                      // X,Y FROM QC8 Code
+                      double xx = dest_state.curvilinearError().matrix()(3,3);
+                      double yy = dest_state.curvilinearError().matrix()(4,4);
+                      double xy = dest_state.curvilinearError().matrix()(4,3);
+                      double dest_glob_error_x = sqrt(0.5*(xx+yy-sqrt((xx-yy)*(xx-yy)+4*xy*xy)));
+                      double dest_glob_error_y = sqrt(0.5*(xx+yy+sqrt((xx-yy)*(xx-yy)+4*xy*xy)));
+                      // R,Phi From https://github.com/cms-sw/cmssw/blob/f77e926a1e98b3d9f1144caf3b83cb3667e23786/DQMOffline/Muon/src/GEMEfficiencyAnalyzer.cc
+                      const LocalPoint&& dest_local_pos = chamber->toLocal(dest_global_pos);
+                      const LocalError&& dest_local_err = dest_state.localError().positionError();
+                      const GlobalError& dest_global_err = ErrorFrameTransformer().transform(dest_local_err, eta_partition->surface());
+                      const double dest_global_r_err = std::sqrt(dest_global_err.rerr(dest_global_pos));
+                      const double dest_global_phi_err = std::sqrt(dest_global_err.phierr(dest_global_pos));
 
-                                                                  const GEMDetId&& gem_id = eta_partition->id();
+                      m_propagated_isME11.push_back(isME11);
+                      m_propagated_isME21.push_back(isME21);
 
-                                                                  //// PROPAGATED HIT ERROR EVALUATION
-                                                                  // X,Y FROM QC8 Code
-                                                                  double xx = dest_state.curvilinearError().matrix()(3,3);
-                                                                  double yy = dest_state.curvilinearError().matrix()(4,4);
-                                                                  double xy = dest_state.curvilinearError().matrix()(4,3);
-                                                                  double dest_glob_error_x = sqrt(0.5*(xx+yy-sqrt((xx-yy)*(xx-yy)+4*xy*xy)));
-                                                                  double dest_glob_error_y = sqrt(0.5*(xx+yy+sqrt((xx-yy)*(xx-yy)+4*xy*xy)));
-                                                                  // R,Phi From https://github.com/cms-sw/cmssw/blob/f77e926a1e98b3d9f1144caf3b83cb3667e23786/DQMOffline/Muon/src/GEMEfficiencyAnalyzer.cc
-                                                                  const LocalPoint&& dest_local_pos = chamber->toLocal(dest_global_pos);
-                                                                  const LocalError&& dest_local_err = dest_state.localError().positionError();
-                                                                  const GlobalError& dest_global_err = ErrorFrameTransformer().transform(dest_local_err, eta_partition->surface());
-                                                                  const double dest_global_r_err = std::sqrt(dest_global_err.rerr(dest_global_pos));
-                                                                  const double dest_global_phi_err = std::sqrt(dest_global_err.phierr(dest_global_pos));
-                                                                  
-                                                                  m_propagated_isME11.push_back(isME11);
-                                                                  m_propagated_isME21.push_back(isME21);
+                      m_propagated_nME1hits.push_back(nME1_hits);
+                      m_propagated_nME2hits.push_back(nME2_hits);
+                      m_propagated_nME3hits.push_back(nME3_hits);
+                      m_propagated_nME4hits.push_back(nME4_hits);
 
-                                                                  m_propagated_nME1hits.push_back(nME1_hits);
-                                                                  m_propagated_nME2hits.push_back(nME2_hits);
-                                                                  m_propagated_nME3hits.push_back(nME3_hits);
-                                                                  m_propagated_nME4hits.push_back(nME4_hits);
-                                                                  
-                                                                  m_propagated_Innermost_x.push_back(transient_track.innermostMeasurementState().globalPosition().x());
-                                                                  m_propagated_Innermost_y.push_back(transient_track.innermostMeasurementState().globalPosition().y());
-                                                                  m_propagated_Innermost_z.push_back(transient_track.innermostMeasurementState().globalPosition().z());
-                                                                  m_propagated_Outermost_x.push_back(transient_track.outermostMeasurementState().globalPosition().x());
-                                                                  m_propagated_Outermost_y.push_back(transient_track.outermostMeasurementState().globalPosition().y());
-                                                                  m_propagated_Outermost_z.push_back(transient_track.outermostMeasurementState().globalPosition().z());
-                                                                  
-                                                                  m_propagated_EtaPartition_centerX.push_back(eta_partition->position().x());
-                                                                  m_propagated_EtaPartition_centerY.push_back(eta_partition->position().y());
-                                                                  m_propagated_EtaPartition_rMin.push_back(eta_partition->surface().rSpan().first);
-                                                                  m_propagated_EtaPartition_rMax.push_back(eta_partition->surface().rSpan().second);
-                                                                  m_propagated_EtaPartition_phiMin.push_back(eta_partition->surface().phiSpan().first);
-                                                                  m_propagated_EtaPartition_phiMax.push_back(eta_partition->surface().phiSpan().second);
-                                                                  
-                                                                  m_propagatedGlb_x.push_back(dest_global_pos.x());
-                                                                  m_propagatedGlb_y.push_back(dest_global_pos.y());
-                                                                  m_propagatedGlb_z.push_back(dest_global_pos.z());
-                                                                  m_propagatedGlb_r.push_back(dest_global_pos.perp());
-                                                                  m_propagatedGlb_phi.push_back(dest_global_pos.phi());
-                                                                  
-                                                                  m_propagated_pt.push_back(muon.pt());
-                                                                  m_propagated_phi.push_back(muon.phi());
-                                                                  m_propagated_eta.push_back(muon.eta());
-                                                                  m_propagated_charge.push_back(muon.charge());
-                                                                  m_propagated_TrackNormChi2.push_back(transient_track.normalizedChi2());
-                                                                  
-                                                                  m_propagatedLoc_x.push_back(dest_local_pos.x());
-                                                                  m_propagatedLoc_phi.push_back(dest_local_pos.phi());
-                                                                  m_propagatedLoc_r.push_back(dest_local_pos.perp());
-                                                                  m_propagatedLoc_y.push_back(dest_local_pos.y());
-                                                                  m_propagatedLoc_dirX.push_back(dest_state.localDirection().x());
-                                                                  m_propagatedLoc_dirY.push_back(dest_state.localDirection().y());
-                                                                  m_propagatedLoc_dirZ.push_back(dest_state.localDirection().z());
-                                                                  
-                                                                  m_propagatedLoc_errX.push_back(dest_local_err.xx());
-                                                                  m_propagatedLoc_errY.push_back(dest_local_err.yy());
-                                                                  m_propagated_isGEM.push_back(muon.isGEMMuon());
+                      m_propagated_Innermost_x.push_back(transient_track.innermostMeasurementState().globalPosition().x());
+                      m_propagated_Innermost_y.push_back(transient_track.innermostMeasurementState().globalPosition().y());
+                      m_propagated_Innermost_z.push_back(transient_track.innermostMeasurementState().globalPosition().z());
+                      m_propagated_Outermost_x.push_back(transient_track.outermostMeasurementState().globalPosition().x());
+                      m_propagated_Outermost_y.push_back(transient_track.outermostMeasurementState().globalPosition().y());
+                      m_propagated_Outermost_z.push_back(transient_track.outermostMeasurementState().globalPosition().z());
 
-                                                                  m_propagatedGlb_errX.push_back(dest_glob_error_x);
-                                                                  m_propagatedGlb_errY.push_back(dest_glob_error_y);
-                                                                  m_propagatedGlb_rerr.push_back(dest_global_r_err);
-                                                                  m_propagatedGlb_phierr.push_back(dest_global_phi_err);
-                                                                  
-                                                                  m_propagated_region.push_back(gem_id.region());
-                                                                  m_propagated_station.push_back(gem_id.station());
-                                                                  m_propagated_layer.push_back(gem_id.layer());
-                                                                  m_propagated_chamber.push_back(gem_id.chamber());
-                                                                  m_propagated_etaP.push_back(gem_id.roll());
-                                                                  
-                                                                  m_isinsideout.push_back(is_insideout);
-                                                                  m_isincoming.push_back(is_incoming);
+                      m_propagated_EtaPartition_centerX.push_back(eta_partition->position().x());
+                      m_propagated_EtaPartition_centerY.push_back(eta_partition->position().y());
+                      m_propagated_EtaPartition_rMin.push_back(eta_partition->surface().rSpan().first);
+                      m_propagated_EtaPartition_rMax.push_back(eta_partition->surface().rSpan().second);
+                      m_propagated_EtaPartition_phiMin.push_back(eta_partition->surface().phiSpan().first);
+                      m_propagated_EtaPartition_phiMax.push_back(eta_partition->surface().phiSpan().second);
 
-                                                                  if(!muon.innerTrack().isNull())
-                                                                      {
-                                                                          m_propagated_numberOfValidPixelHits.push_back(muon.innerTrack()->hitPattern().numberOfValidPixelHits());
-                                                                          m_propagated_innerTracker_ValidFraction.push_back(muon.innerTrack()->validFraction());
-                                                                          m_propagated_numberOfValidTrackerHits.push_back(muon.innerTrack()->hitPattern().numberOfValidTrackerHits());
-                                                                      }
+                      m_propagatedGlb_x.push_back(dest_global_pos.x());
+                      m_propagatedGlb_y.push_back(dest_global_pos.y());
+                      m_propagatedGlb_z.push_back(dest_global_pos.z());
+                      m_propagatedGlb_r.push_back(dest_global_pos.perp());
+                      m_propagatedGlb_phi.push_back(dest_global_pos.phi());
 
-                                                              }// Propagation is inside EtaPartition
-                                                      }//Loop over Eta Partition
-                                              }//Loop over chambers
-                                      }//Loop over SuperChambers
-                              }//Loop over stations
-                      }//Loop over regions
-              }//isCSC therefore perform propagation
-	    }//!muon.outerTrack().isNull()
+                      m_propagated_pt.push_back(muon.pt());
+                      m_propagated_phi.push_back(muon.phi());
+                      m_propagated_eta.push_back(muon.eta());
+                      m_propagated_charge.push_back(muon.charge());
+                      m_propagated_TrackNormChi2.push_back(transient_track.normalizedChi2());
+
+                      m_propagatedLoc_x.push_back(dest_local_pos.x());
+                      m_propagatedLoc_phi.push_back(dest_local_pos.phi());
+                      m_propagatedLoc_r.push_back(dest_local_pos.perp());
+                      m_propagatedLoc_y.push_back(dest_local_pos.y());
+                      m_propagatedLoc_dirX.push_back(dest_state.localDirection().x());
+                      m_propagatedLoc_dirY.push_back(dest_state.localDirection().y());
+                      m_propagatedLoc_dirZ.push_back(dest_state.localDirection().z());
+
+                      m_propagatedLoc_errX.push_back(dest_local_err.xx());
+                      m_propagatedLoc_errY.push_back(dest_local_err.yy());
+                      m_propagated_isGEM.push_back(muon.isGEMMuon());
+
+                      m_propagatedGlb_errX.push_back(dest_glob_error_x);
+                      m_propagatedGlb_errY.push_back(dest_glob_error_y);
+                      m_propagatedGlb_rerr.push_back(dest_global_r_err);
+                      m_propagatedGlb_phierr.push_back(dest_global_phi_err);
+
+                      m_propagated_region.push_back(gem_id.region());
+                      m_propagated_station.push_back(gem_id.station());
+                      m_propagated_layer.push_back(gem_id.layer());
+                      m_propagated_chamber.push_back(gem_id.chamber());
+                      m_propagated_etaP.push_back(gem_id.roll());
+
+                      if(!muon.innerTrack().isNull()){
+
+                        m_propagated_numberOfValidPixelHits.push_back(muon.innerTrack()->hitPattern().numberOfValidPixelHits());
+                        m_propagated_innerTracker_ValidFraction.push_back(muon.innerTrack()->validFraction());
+                        m_propagated_numberOfValidTrackerHits.push_back(muon.innerTrack()->hitPattern().numberOfValidTrackerHits());
+                      }
+
+                    }// Propagation is inside EtaPartition
+                  }//Loop over Eta Partition
+                }//Loop over chambers
+              }//Loop over SuperChambers
+            }//Loop over stations
+          }//Loop over regions
+        }//isCSC therefore perform propagation
+	    } //!muon.globalTrack().isNull()
 	
-	}//loop on reco muons
-    }//muons.isValid()
+	  }//loop on reco muons
+  }//muons.isValid()
   
   return;
-  
 }
 
 

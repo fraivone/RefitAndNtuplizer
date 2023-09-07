@@ -78,12 +78,16 @@ MuNtupleConfig::MuNtupleConfig(const edm::ParameterSet & config,
   
   m_inputTags["genParticlesTag"] = config.getUntrackedParameter<edm::InputTag>("genParticlesTag",none);
 
+
+  refitOption = config.getParameter<int>("refitOption");
+  verbose = config.getParameter<bool>("verbose");
   m_muonSP = std::make_unique<MuonServiceProxy>(config.getParameter<edm::ParameterSet>("ServiceParameters"), std::move(collector));
 
   // MuonRefit
   edm::ParameterSet muonTransformerParam = config.getParameter<edm::ParameterSet>("MuonTransformer");
+  thePropagatorName = muonTransformerParam.getParameter<std::string>("Propagator");
   theMuonTransformer = std::make_unique<MuonTransformer>(muonTransformerParam,collector);
-
+  thePropagatorToken = collector.esConsumes(edm::ESInputTag("", thePropagatorName));
 }
 
 void MuNtupleConfig::getES(const edm::EventSetup & environment) 
@@ -92,6 +96,7 @@ void MuNtupleConfig::getES(const edm::EventSetup & environment)
   m_trackingGeometry = environment.getHandle(m_trackingGeomToken);
   m_transientTrackBuilder = environment.getHandle(m_ttbToken);
   theMuonTransformer->setServices(environment);
+  prop = environment.getHandle(thePropagatorToken);
 }
 
 void MuNtupleConfig::getES(const edm::Run &run, const edm::EventSetup & environment) 
@@ -105,9 +110,6 @@ void MuNtupleConfig::getES(const edm::Run &run, const edm::EventSetup & environm
 
   m_cscGeometry = environment.getHandle(m_cscGeomToken);
   m_gemGeometry = environment.getHandle(m_gemGeomToken);
-
-  
-
 }
 
 

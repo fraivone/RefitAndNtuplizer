@@ -62,6 +62,8 @@ class MuNtupleConfig
 
   /// Map containing different input tags
   std::map<std::string, edm::InputTag> m_inputTags;
+  int refitOption;
+  bool verbose;
 
   /// The class to handle DT trigger time pedestals
   /* std::map<PhaseTag, std::unique_ptr<DTTTrigBaseSync>> m_dtSyncs; */
@@ -87,13 +89,15 @@ class MuNtupleConfig
   /// Handle to the Transient Track Builder
   edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> m_ttbToken;
   edm::ESHandle<TransientTrackBuilder> m_transientTrackBuilder;
-
+  edm::ESGetToken<Propagator, TrackingComponentsRecord> thePropagatorToken;
+  std::string thePropagatorName;
 
   //MuonServiceProxy *muon_service;
   std::unique_ptr<MuonServiceProxy> m_muonSP;
 
   /// The muontransformer class
   std::unique_ptr<MuonTransformer> theMuonTransformer;
+  edm::ESHandle<Propagator> prop;
 
 };
 

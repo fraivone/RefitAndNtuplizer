@@ -42,7 +42,7 @@ class MuNtupleGEMRefitMuonFiller : public MuNtupleBaseFiller
   /// Intialize function : setup tree branches etc ... 
   virtual void initialize() final;
   
-  /// Clear branches before event filling 
+  /// Clear branches before event filling
   virtual void clear() final;
  
   virtual void fill(const edm::Event & ev) final;
@@ -69,6 +69,13 @@ class MuNtupleGEMRefitMuonFiller : public MuNtupleBaseFiller
   std::fstream outdata;
   
   unsigned int m_nMuons; 
+  bool isCSC = false;
+  bool isME11 = false;
+  bool isME21 = false;
+  int nME1_hits = 0;
+  int nME2_hits = 0;
+  int nME3_hits = 0;
+  int nME4_hits = 0;
 
   std::vector<float> m_pt;     // muon pT [GeV/c]
   std::vector<float> m_phi;    // muon phi [rad]
@@ -92,8 +99,6 @@ class MuNtupleGEMRefitMuonFiller : public MuNtupleBaseFiller
   std::vector<bool>  m_isMedium; // Medium muon ID
   std::vector<bool>  m_isTight;  // Tight muon ID
 
-  std::vector<bool> m_isincoming;
-  std::vector<bool> m_isinsideout;
   
   float m_path_length;
   float m_displacement;
