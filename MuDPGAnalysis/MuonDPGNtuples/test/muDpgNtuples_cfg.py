@@ -63,13 +63,13 @@ options.register('reUnpack',
                  "enables reprocessing of digis: i.e OHStatus is not stored in RECO datesets, but can be extracted by re-unpacking data from a RAW dataset.")
 
 options.register('storeOHStatus',
-                 False, #default value,
+                 True, #default value,
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.bool,
                  "Save OH status info from unpacker")
 
 options.register('storeAMCStatus',
-                 False, #default value
+                 True, #default value
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.bool,
                  "Save AMC status info from unpacker")
@@ -210,7 +210,5 @@ elif options.STA:
     # TO STORE OUTPUT FILE
     #process.this_is_the_end = cms.EndPath(process.gino)
 else:
-    process.gino = cms.OutputModule("PoolOutputModule", outputCommands = cms.untracked.vstring("drop *_*_*_*","keep *_*_*_MUNTUPLES"), fileName=cms.untracked.string("out.root"))
     process.p = cms.Path(
         process.muNtupleProducer)
-    process.this_is_the_end = cms.EndPath(process.gino)
