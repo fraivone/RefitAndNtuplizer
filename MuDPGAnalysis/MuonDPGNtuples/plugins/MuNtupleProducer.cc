@@ -35,7 +35,7 @@
 #include "MuDPGAnalysis/MuonDPGNtuples/src/MuNtupleGEMDigiFiller.h"
 #include "MuDPGAnalysis/MuonDPGNtuples/src/MuNtupleGEMRecHitFiller.h"
 #include "MuDPGAnalysis/MuonDPGNtuples/src/MuNtupleGEMOHStatusFiller.h"
-// #include "MuDPGAnalysis/MuonDPGNtuples/src/MuNtupleGEMAMCStatusFiller.h"
+#include "MuDPGAnalysis/MuonDPGNtuples/src/MuNtupleGEMAMCStatusFiller.h"
 #include "MuDPGAnalysis/MuonDPGNtuples/src/MuNtupleGEMSimHitFiller.h"
 #include "MuDPGAnalysis/MuonDPGNtuples/src/MuNtupleGEMSegmentFiller.h"
 #include "MuDPGAnalysis/MuonDPGNtuples/src/MuNtupleGEMMuonFiller.h"
@@ -51,7 +51,7 @@ MuNtupleProducer::MuNtupleProducer(const edm::ParameterSet &config)
   edm::Service<TFileService> fileService;
   bool isMC = static_cast<bool>(config.getParameter<bool>("isMC"));
   bool storeOHStatus = static_cast<bool>(config.getParameter<bool>("storeOHStatus"));
-  //bool storeAMCStatus = static_cast<bool>(config.getParameter<bool>("storeAMCStatus"));
+  bool storeAMCStatus = static_cast<bool>(config.getParameter<bool>("storeAMCStatus"));
   bool RunOnSTA = static_cast<bool>(config.getParameter<bool>("STA"));
   float displacement = static_cast<double>(config.getParameter<double>("displacement"));
 
@@ -65,8 +65,8 @@ MuNtupleProducer::MuNtupleProducer(const edm::ParameterSet &config)
       m_fillers.push_back(std::make_unique<MuNtupleGEMDigiFiller>(consumesCollector(), m_config, m_tree, "gemDigi"));
   if (storeOHStatus)
     m_fillers.push_back(std::make_unique<MuNtupleGEMOHStatusFiller>(consumesCollector(), m_config, m_tree, "gemOHStatus"));
-  // if (storeAMCStatus)
-  //   m_fillers.push_back(std::make_unique<MuNtupleGEMAMCStatusFiller>(consumesCollector(), m_config, m_tree, "gemAMCStatus"));
+  if (storeAMCStatus)
+    m_fillers.push_back(std::make_unique<MuNtupleGEMAMCStatusFiller>(consumesCollector(), m_config, m_tree, "gemAMCStatus"));
 
   m_fillers.push_back(std::make_unique<MuNtupleGEMRecHitFiller>(consumesCollector(), m_config, m_tree, "gemRecHit"));
 
@@ -75,9 +75,9 @@ MuNtupleProducer::MuNtupleProducer(const edm::ParameterSet &config)
   if (RunOnSTA)
     m_fillers.push_back(std::make_unique<MuNtupleGEMStandAloneMuonFiller>(consumesCollector(), m_config, m_tree, "mu",displacement));
   else
-      m_fillers.push_back(std::make_unique<MuNtupleGEMMuonFiller>(consumesCollector(), m_config, m_tree, "mu",displacement));
+    m_fillers.push_back(std::make_unique<MuNtupleGEMRefitMuonFiller>(consumesCollector(), m_config, m_tree, "mu_refit",displacement));
   
-  m_fillers.push_back(std::make_unique<MuNtupleGEMRefitMuonFiller>(consumesCollector(), m_config, m_tree, "mu_refit",displacement));
+  
 
   if (isMC)
     m_fillers.push_back(std::make_unique<MuNtupleGEMSimHitFiller>(consumesCollector(), m_config, m_tree, "gemSimHit"));
